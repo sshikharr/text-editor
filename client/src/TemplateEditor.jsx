@@ -227,4 +227,4 @@ const TemplateEditor = () => {
   );
 };
 
-export default TemplateEditor;
+export default TemplateEditor

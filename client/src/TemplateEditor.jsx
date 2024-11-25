@@ -88,89 +88,112 @@ const TemplateEditor = () => {
   };
 
   const convertNodesToDocxParagraphs = (parentNode) => {
-    const paragraphs = [];
-    let currentRuns = [];
+  const paragraphs = [];
+  let currentRuns = [];
 
-    const processNode = (node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent.trim();
-        if (text) {
-          let style = { text, size: 24 }; // Default size
+  const processNode = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent.trim();
+      if (text) {
+        let style = { 
+          text, 
+          size: 24,
+          color: '000000' // Explicitly set black color
+        };
 
-          let parent = node.parentElement;
-          while (parent) {
-            if (parent.tagName === 'STRONG' || parent.tagName === 'B') style.bold = true;
-            if (parent.tagName === 'EM' || parent.tagName === 'I') style.italics = true;
-            if (parent.tagName === 'U') style.underline = true;
+        let parent = node.parentElement;
+        while (parent) {
+          if (parent.tagName === 'STRONG' || parent.tagName === 'B') style.bold = true;
+          if (parent.tagName === 'EM' || parent.tagName === 'I') style.italics = true;
+          if (parent.tagName === 'U') style.underline = true;
 
-            // Set size based on heading level
-            if (parent.tagName?.match(/^H[1-6]$/)) {
-              const level = parseInt(parent.tagName[1]);
-              style.size = getHeadingSize(level);
-              style.bold = true; // Make headings bold by default
-            }
-
-            parent = parent.parentElement;
+          // Set size based on heading level and ensure black color
+          if (parent.tagName?.match(/^H[1-6]$/)) {
+            const level = parseInt(parent.tagName[1]);
+            style.size = getHeadingSize(level);
+            style.bold = true;
+            style.color = '000000'; // Ensure headings are black
           }
 
-          currentRuns.push(new TextRun(style));
+          parent = parent.parentElement;
         }
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        switch (node.tagName.toLowerCase()) {
-          case 'p':
-          case 'div':
-            if (currentRuns.length > 0) {
-              paragraphs.push(new Paragraph({ children: currentRuns }));
-              currentRuns = [];
-            }
-            Array.from(node.childNodes).forEach(processNode);
-            if (currentRuns.length > 0) {
-              paragraphs.push(new Paragraph({ children: currentRuns }));
-              currentRuns = [];
-            }
-            break;
 
-          case 'h1':
-          case 'h2':
-          case 'h3':
-          case 'h4':
-          case 'h5':
-          case 'h6': {
-            const level = parseInt(node.tagName[1]);
-            if (currentRuns.length > 0) {
-              paragraphs.push(new Paragraph({ children: currentRuns }));
-              currentRuns = [];
-            }
-            Array.from(node.childNodes).forEach(processNode);
-            if (currentRuns.length > 0) {
-              paragraphs.push(
-                new Paragraph({
-                  children: currentRuns,
-                  heading: HeadingLevel[`HEADING_${level}`],
-                  spacing: {
-                    before: 240, // Add some spacing before headings (20pt)
-                    after: 120   // Add some spacing after headings (10pt)
-                  }
-                })
-              );
-              currentRuns = [];
-            }
-            break;
-          }
-          default:
-            Array.from(node.childNodes).forEach(processNode);
-        }
+        currentRuns.push(new TextRun(style));
       }
-    };
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      switch (node.tagName.toLowerCase()) {
+        case 'p':
+        case 'div':
+          if (currentRuns.length > 0) {
+            paragraphs.push(new Paragraph({ 
+              children: currentRuns,
+              style: {
+                color: '000000' // Ensure paragraph text is black
+              }
+            }));
+            currentRuns = [];
+          }
+          Array.from(node.childNodes).forEach(processNode);
+          if (currentRuns.length > 0) {
+            paragraphs.push(new Paragraph({ 
+              children: currentRuns,
+              style: {
+                color: '000000'
+              }
+            }));
+            currentRuns = [];
+          }
+          break;
 
-    processNode(parentNode);
-
-    if (currentRuns.length > 0) {
-      paragraphs.push(new Paragraph({ children: currentRuns }));
+        case 'h1':
+        case 'h2':
+        case 'h3':
+        case 'h4':
+        case 'h5':
+        case 'h6': {
+          const level = parseInt(node.tagName[1]);
+          if (currentRuns.length > 0) {
+            paragraphs.push(new Paragraph({ children: currentRuns }));
+            currentRuns = [];
+          }
+          Array.from(node.childNodes).forEach(processNode);
+          if (currentRuns.length > 0) {
+            paragraphs.push(
+              new Paragraph({
+                children: currentRuns,
+                heading: HeadingLevel[`HEADING_${level}`],
+                spacing: {
+                  before: 240,
+                  after: 120
+                },
+                style: {
+                  color: '000000' // Ensure heading text is black
+                }
+              })
+            );
+            currentRuns = [];
+          }
+          break;
+        }
+        default:
+          Array.from(node.childNodes).forEach(processNode);
+      }
     }
-
-    return paragraphs;
   };
+
+  processNode(parentNode);
+
+  if (currentRuns.length > 0) {
+    paragraphs.push(new Paragraph({ 
+      children: currentRuns,
+      style: {
+        color: '000000'
+      }
+    }));
+  }
+
+  return paragraphs;
+};
 
   const downloadAsWord = async () => {
     const template = templates.find(t => t.id === parseInt(selectedTemplateId));

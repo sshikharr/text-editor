@@ -13,6 +13,9 @@
     "@tinymce/tinymce-react": "^5.1.1",
     "docx": "^9.0.3",
     "file-saver": "^2.0.5",
+    "html2canvas": "^1.4.1",
+    "html2pdf.js": "^0.10.2",
+    "jspdf": "^2.5.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

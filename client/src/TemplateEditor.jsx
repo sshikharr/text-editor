@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef,useEffect} from 'react';
 import { Editor } from '@tinymce/tinymce-react';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
+// import 
 
 const TemplateEditor = () => {
   const [mode, setMode] = useState('admin');
@@ -19,8 +20,19 @@ const TemplateEditor = () => {
     }
   };
 
+  //partially editable 
+
+  const insertPartiallyEditable = () => {
+    const content = prompt('Enter content for partially editable section:');
+    if (content && editorRef.current) {
+      const partiallyEditable = `[[${content}]]`;
+      editorRef.current.execCommand('mceInsertContent', false, partiallyEditable);
+    }
+  };
+  
+
   // Extract variables using the new format
-  const extractVariables = (text) => {
+  const extractVariablesEditable = (text) => {
     const regex = /\{\{(.*?)\}\}/g;
     const matches = [...text.matchAll(regex)];
     const fields = {};
@@ -30,8 +42,9 @@ const TemplateEditor = () => {
     return fields;
   };
 
+  
   const createTemplate = () => {
-    const fields = extractVariables(newTemplateText);
+    const fields = extractVariablesEditable(newTemplateText);
     const newTemplate = {
       id: Date.now(),
       text: newTemplateText,
@@ -41,28 +54,82 @@ const TemplateEditor = () => {
     setNewTemplateText('');
   };
 
-  const processTemplate = (template) => {
-    if (!template) return '';
-    let processedText = template.text;
-    Object.entries(editableFields).forEach(([field, value]) => {
-      const regex = new RegExp(`\\{\\{${field}\\}\\}`, 'g');
-      processedText = processedText.replace(regex, value || `{{${field}}}`);
-    });
-    return processedText;
-  };
+  
+    
+    const extractPartiallyEditableFields = (text) => {
+      const regex = /\[\[(.*?)\]\]/g;
+      const matches = [...text.matchAll(regex)];
+      const fields = {};
+      matches.forEach(match => {
+        fields[match[1]] = match[1]; // Initialize with the same value as the placeholder
+      });
+      return fields;
+    };
+
+    const processTemplate = (template) => {
+      if (!template) return '';
+      let processedText = template.text;
+    
+      // Replace fully editable fields
+      Object.entries(editableFields).forEach(([field, value]) => {
+        const regex = new RegExp(`\\{\\{${field}\\}\\}`, 'g');
+        processedText = processedText.replace(regex, value || `{{${field}}}`);
+      });
+    
+      // Replace partially editable fields with contenteditable spans
+      Object.entries(editableFields).forEach(([field, value]) => {
+        const regex = new RegExp(`\\[\\[${field}\\]\\]`, 'g');
+        processedText = processedText.replace(
+          regex,
+          `<span contenteditable="true" data-field="${field}" class="partially-editable">${value}</span>`
+        );
+      });
+    
+      return processedText;
+    };
+    
+    const handleEditableContentChange = (e) => {
+      const field = e.target.getAttribute('data-field');
+      if (field) {
+        const value = e.target.innerText;
+        setEditableFields((prev) => ({
+          ...prev,
+          [field]: value,
+        }));
+      }
+    };
+    
+    useEffect(() => {
+      const container = document.querySelector('.preview-container');
+      if (container) {
+        container.addEventListener('input', handleEditableContentChange);
+      }
+    
+      return () => {
+        if (container) {
+          container.removeEventListener('input', handleEditableContentChange);
+        }
+      };
+    }, []);
+    
+    
 
   const handleTemplateSelect = (templateId) => {
     const template = templates.find(t => t.id === parseInt(templateId));
     if (template) {
       setSelectedTemplateId(templateId);
-      // Initialize fields with empty values if not already set
-      const initialFields = {};
-      Object.keys(template.fields).forEach(field => {
-        initialFields[field] = editableFields[field] || '';
+  
+      const initialEditableFields = { ...template.fields };
+      const partiallyEditableFields = extractPartiallyEditableFields(template.text);
+  
+      // Merge both editable and partially editable fields
+      setEditableFields({
+        ...initialEditableFields,
+        ...partiallyEditableFields,
       });
-      setEditableFields(initialFields);
     }
   };
+  
 
   const handleFieldChange = (field, value) => {
     setEditableFields(prev => ({
@@ -74,30 +141,27 @@ const TemplateEditor = () => {
   const downloadAsWord = async () => {
     const template = templates.find(t => t.id === parseInt(selectedTemplateId));
     if (!template) return;
-
+  
     const processedText = processTemplate(template);
-
-    // Strip HTML tags for Word document
+  
+    // Strip HTML tags and clean up partially editable placeholders
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = processedText;
     const plainText = tempDiv.textContent || tempDiv.innerText;
-
+  
     const doc = new Document({
-      sections: [{
-        properties: {},
-        children: [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: plainText,
-                size: 24,
-              }),
-            ],
-          }),
-        ],
-      }],
+      sections: [
+        {
+          properties: {},
+          children: [
+            new Paragraph({
+              children: [new TextRun({ text: plainText, size: 24 })],
+            }),
+          ],
+        },
+      ],
     });
-
+  
     const blob = await Packer.toBlob(doc);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -106,6 +170,43 @@ const TemplateEditor = () => {
     a.click();
     URL.revokeObjectURL(url);
   };
+  //parsing the
+  const parseHtmlToDocx = (html) => {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+  
+    const parseNode = (node) => {
+      const children = [];
+      node.childNodes.forEach((child) => {
+        if (child.nodeType === Node.TEXT_NODE) {
+          children.push(new TextRun({ text: child.textContent }));
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          const style = {};
+          if (child.tagName === 'B' || child.tagName === 'STRONG') {
+            style.bold = true;
+          }
+          if (child.tagName === 'I' || child.tagName === 'EM') {
+            style.italic = true;
+          }
+          if (child.tagName === 'U') {
+            style.underline = {};
+          }
+          if (child.tagName === 'BR') {
+            children.push(new TextRun({ text: '\n' }));
+            return;
+          }
+          const childNodes = parseNode(child);
+          children.push(...childNodes.map((ch) => new TextRun({ ...style, ...ch })));
+        }
+      });
+      return children;
+    };
+  
+    return tempDiv.childNodes.length
+      ? tempDiv.childNodes.flatMap(parseNode)
+      : [new TextRun({ text: '' })];
+  };
+  
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -141,16 +242,18 @@ const TemplateEditor = () => {
                   'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
                   'insertdatetime', 'media', 'table', 'code', 'help', 'wordcount'
                 ],
-                toolbar: 'undo redo | formatselect | ' +
-                  'bold italic backcolor | alignleft aligncenter ' +
-                  'alignright alignjustify | bullist numlist outdent indent | ' +
-                  'removeformat | insertVariable',
                 setup: (editor) => {
                   editor.ui.registry.addButton('insertVariable', {
                     text: 'Insert Variable',
-                    onAction: insertVariable
+                    onAction: insertVariable,
+                  });
+                  editor.ui.registry.addButton('insertPartiallyEditable', {
+                    text: 'Partially Editable',
+                    onAction: insertPartiallyEditable,
                   });
                 },
+                toolbar: 'undo redo | formatselect | bold italic backcolor | alignleft aligncenter ' +
+                  'alignright alignjustify | bullist numlist outdent indent | removeformat | insertVariable insertPartiallyEditable',                
                 content_style: 'body { font-family:Helvetica,Arial,sans-serif; font-size:14px }'
               }}
             />
@@ -194,24 +297,28 @@ const TemplateEditor = () => {
           {selectedTemplateId && (
             <div className="space-y-6">
               <div className="grid gap-4">
-                {Object.entries(editableFields).map(([field, value]) => (
-                  <div key={field} className="flex items-center gap-4">
-                    <label className="min-w-[120px] font-medium">{field}:</label>
-                    <input
-                      className="flex-1 p-2 border rounded"
-                      value={value}
-                      onChange={(e) => handleFieldChange(field, e.target.value)}
-                    />
-                  </div>
-                ))}
-              </div>
+  {Object.entries(editableFields).map(([field, value]) => (
+    <div key={field} className="flex items-center gap-4">
+      <label className="min-w-[120px] font-medium">{field}:</label>
+      <input
+        className="flex-1 p-2 border rounded"
+        value={value}
+        onChange={(e) => handleFieldChange(field, e.target.value)}
+      />
+    </div>
+  ))}
+</div>
 
-              <div className="border rounded p-4">
-                <h3 className="text-lg font-bold mb-4">Preview:</h3>
-                <div dangerouslySetInnerHTML={{ 
-                  __html: processTemplate(templates.find(t => t.id === parseInt(selectedTemplateId))) 
-                }} />
-              </div>
+
+<div className="border rounded p-4 preview-container">
+  <h3 className="text-lg font-bold mb-4">Preview:</h3>
+  <div
+    dangerouslySetInnerHTML={{
+      __html: processTemplate(templates.find((t) => t.id === parseInt(selectedTemplateId))),
+    }}
+  />
+</div>
+
 
               <button 
                 className="px-4 py-2 bg-blue-600 text-white rounded"
@@ -228,3 +335,4 @@ const TemplateEditor = () => {
 };
 
 export default TemplateEditor;
+

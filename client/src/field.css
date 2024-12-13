@@ -1,0 +1,8 @@
+.partially-editable {
+    background-color: #f0f8ff; /* Light blue background */
+    border: 1px dashed #007bff; /* Dashed border */
+    padding: 2px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+  
